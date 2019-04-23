@@ -141,7 +141,8 @@ Cmd::Cmd(const string &cmd)
             }
         } else {
             smatch m;
-            if ((it->size() > 0) && ((*it)[0] != '\"') && ((*it)[0] != '\'')
+            // "$X" is "{value of X}" and '$HOME' is '$HOME'
+            if ((it->size() > 0) && ((*it)[0] != '\'')
                 && (regex_search(*it, m, var_re))) {
                 char *value;
                 if (value = getenv(m[1].str().c_str())) {
@@ -149,7 +150,6 @@ Cmd::Cmd(const string &cmd)
                 } else {
                     it->replace(m.position(1) - 1, m.length(1) + 1, "");
                 }
-                _argv.push_back(*it);
             } else if (regex_match(*it, m, user_re)) {
                 auto user_pw = getpwnam(m[1].str().c_str());
                 if (user_pw) {
@@ -157,10 +157,12 @@ Cmd::Cmd(const string &cmd)
                     // don't user regex_replace in case any fmt in string
                     it->replace(m.position(0), m.length(0), user_dirname + m[2].str());
                 }
-                _argv.push_back(*it);
-            } else {
-                _argv.push_back(*it);
+            } 
+            if (it->size() > 0 && ((*it)[0] == '\'' || (*it)[0] == '\"')) {
+                it->erase(0, 1);
+                it->erase(it->size() - 1);
             }
+            _argv.push_back(*it);
         }
     }
 
@@ -214,7 +216,12 @@ int Cmd::exec(int infd, int outfd) const
             ret = 0;
         }
         if (_argv[0] == "cd") {
-            string cd_dirname = trim(_argv[1]);
+            string cd_dirname;
+            if (_argv.size() == 1) {
+                cd_dirname = "";
+            } else {
+                cd_dirname = trim(_argv[1]);
+            }
             const char *real_dirname = cd_dirname.c_str();
             if (cd_dirname == "") { // the "~user" has been parsed
                 char *home = getenv("HOME");
@@ -224,7 +231,7 @@ int Cmd::exec(int infd, int outfd) const
             } else if (cd_dirname == "-") { 
                 
             }
-            ret = chdir(cd_dirname.c_str());
+            ret = chdir(real_dirname);
         }
         if (_argv[0] == "env") {
             for (char **p = environ; *p; p++) {
