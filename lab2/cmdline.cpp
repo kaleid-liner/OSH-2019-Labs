@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <pwd.h>
 
 using namespace std;
 
@@ -49,6 +50,8 @@ namespace {
                 last_is_pipe = false;
             }
         }
+
+        return tokens;
     }
 
     void trim(string &s, const string &chars = " ")
@@ -92,9 +95,9 @@ namespace {
         if (regex_search(s, m, re)) {
             string filename = m[3].str();
             if (m[1].matched) {
-                fd = open(filename.c_str(), O_CREAT | O_WRONLY);
+                fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666); // will be umasked
             } else {
-                fd = open(filename.c_str(), O_APPEND | O_WRONLY);
+                fd = open(filename.c_str(), O_APPEND | O_WRONLY, 0666);
             }
         }
 
@@ -107,16 +110,27 @@ namespace {
         static const regex sre("(\"[^\"]*)(<|<<|>|>>)([^\"]*\")");
 
         string ret = regex_replace(s, dre, "$1$3");
-        string ret = regex_replace(ret, sre, "$1$3");
+        ret = regex_replace(ret, sre, "$1$3");
         return ret;
     }
 }
 
 extern char **environ;
 
+const char *Cmd::builtins[] = {
+    "exit",
+    "pwd",
+    "env",
+    "export",
+    "unset",
+    "cd"
+};
+
 Cmd::Cmd(const string &cmd)
 {
-    bool neglect = false;
+    static const regex var_re("\\$(\\w+)");
+    static const regex user_re("~([\\w-]+)(\\S*)");
+
     vector<string> tokens = split_quote(cmd);
     for (auto it = tokens.begin(); it != tokens.end(); ++it) {
         if ((*it)[0] == '<' || (*it)[0] == '>') {
@@ -126,51 +140,114 @@ Cmd::Cmd(const string &cmd)
                 continue;
             }
         } else {
-            _argv.push_back(*it);
+            smatch m;
+            if ((it->size() > 0) && ((*it) != "\"") && (regex_search(*it, m, var_re))) {
+                char *value;
+                if (value = getenv(m[1].str().c_str())) {
+                    it->replace(m.position(1) - 1, m.length(1) + 1, value);
+                } else {
+                    it->replace(m.position(1) - 1, m.length(1) + 1, "");
+                }
+                _argv.push_back(*it);
+            } else if (regex_match(*it, m, user_re)) {
+                auto user_pw = getpwnam(m[1].str().c_str());
+                if (user_pw) {
+                    string user_dirname = user_pw->pw_dir;
+                    // don't user regex_replace in case any fmt in string
+                    it->replace(m.position(0), m.length(0), user_dirname + m[2].str());
+                }
+                _argv.push_back(*it);
+            } else {
+                _argv.push_back(*it);
+            }
         }
     }
+
+    string command = _argv[0];
+    const char **builtins_end = builtins + sizeof(builtins) / sizeof(char*);
+    _is_builtin = find_if(builtins, builtins_end, 
+        [&] (auto s) {
+            return command == s;
+        }) != builtins_end;
 }
 
-int Cmd::exec() const 
+int Cmd::exec(int infd, int outfd) const 
 {
-    if (_argv[0] == "exit") {
-        exit(0);
-    } 
-    if (_argv[0] == "pwd") {
-        char *dirname = get_current_dir_name();
-        cout << dirname << endl;
-        return 0;
+    int saved_stdin = dup(0);
+    int saved_stdout = dup(1);
+    int ret;
+
+    if (infd != 0) {
+        dup2(infd, 0);
+        close(infd);
     }
-    if (_argv[0] == "cd") {
-        return chdir(_argv[1].c_str());
-    }
-    if (_argv[0] == "env") {
-        for (char **p = environ; p; p++) {
-            cout << *p << endl;
-        }
-        return 0;
-    }
-    if (_argv[0] == "export") {
-        string kv = _argv[1];
-        size_t pos = _argv[1].find_first_of(kv);
-        string k = _argv[1].substr(0, pos);
-        string v = _argv[1].substr(pos + 1);
-        return setenv(k.c_str(), v.c_str(), 1);
-    }
-    if (_argv[0] == "unset") {
-        return unsetenv(_argv[1].c_str());
+    if (outfd != 1) {
+        dup2(outfd, 1);
+        close(outfd);
     }
 
-    vector<char *> argv;
-    for (const auto &s: _argv) {
-        argv.push_back(const_cast<char *>(s.c_str()));
+    if (!_is_builtin) {
+        if (fork() == 0) {
+            vector<char *> argv;
+            for (const auto &s: _argv) {
+                argv.push_back(const_cast<char *>(s.c_str()));
+            }
+            argv.push_back(NULL);
+            if ((ret = execvp(_argv[0].c_str(), argv.data())) < 0) {
+                // a rather crude hanler
+                // will i use libexplain?
+                cerr << "No such command \"" << _argv[0] << "\" or command runtime error." << endl;
+            }
+            exit(ret);
+        }
+
+        wait(NULL);
+        ret = 0;
+    } else {
+        if (_argv[0] == "exit") {
+            exit(0);
+        } 
+        if (_argv[0] == "pwd") {
+            char *pwd_dirname = get_current_dir_name();
+            cout << pwd_dirname << endl;
+            ret = 0;
+        }
+        if (_argv[0] == "cd") {
+            string cd_dirname = trim(_argv[1]);
+            const char *real_dirname = cd_dirname.c_str();
+            if (cd_dirname == "") { // the "~user" has been parsed
+                char *home = getenv("HOME");
+                if ((home = getenv("HOME")) || (home = getpwuid(getuid())->pw_dir)) {
+                    real_dirname = home;
+                }
+            } else if (cd_dirname == "-") { 
+                
+            }
+            ret = chdir(cd_dirname.c_str());
+        }
+        if (_argv[0] == "env") {
+            for (char **p = environ; *p; p++) {
+                cout << *p << endl;
+            }
+            ret = 0;
+        }
+        if (_argv[0] == "export") {
+            string kv = _argv[1];
+            size_t pos = _argv[1].find_first_of('=');
+            string k = _argv[1].substr(0, pos);
+            string v = _argv[1].substr(pos + 1);
+            ret = setenv(k.c_str(), v.c_str(), 1);
+        }
+        if (_argv[0] == "unset") {
+            ret = unsetenv(_argv[1].c_str());
+        }
     }
-    argv.push_back(nullptr);
-    if (execvp(_argv[0].c_str(), argv.data()) < 0) {
-        // a rather crude hanler
-        // will i use libexplain?
-        cerr << "No such command \"" << _argv[0] << "\" or command runtime error." << endl;
-    }
+
+    dup2(saved_stdin, 0);
+    dup2(saved_stdout, 1);
+    close(saved_stdin);
+    close(saved_stdout);
+    return ret;
 }
 
 Cmdline::Cmdline(const string &cmdline): _executed(false)
@@ -190,33 +267,20 @@ int Cmdline::exec() const
     int fd[2];
     int infd = _infd;
     int outfd;
+    int ret;
 
-    for (int i = 0; i < n - 1; ++i) {
+    for (int i = 0; i < n; ++i) {
         if (i != n - 1) {
             pipe(fd);
             outfd = fd[1];
         } else {
             outfd = _outfd;
         }
-        if (fork() == 0) {
-            if (infd != 0) {
-                dup2(infd, 0);
-                close(infd);
-            }
-            if (outfd != 1) {
-                dup2(outfd, 1);
-                close(outfd);
-            }
-            return _cmds[i].exec();
-        }
-        close(fd[1]);
-        close(infd);
+        ret = _cmds[i].exec(infd, outfd);
         infd = fd[0];
     }
 
     _executed = true;
 
-    wait(NULL);
-    
-    return 0;
+    return ret;
 }

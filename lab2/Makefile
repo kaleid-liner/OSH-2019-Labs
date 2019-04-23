@@ -1,16 +1,15 @@
 CC = g++
 LDFLAGS = -lreadline
-CFLAGS = 
+CFLAGS = -std=c++11
 DEPS = cmdline.h
 OBJS = cmdline.o main.o
-SRCS = cmdline.cpp main.cpp
 TARGET = sh
 
-$(OBJS): $(SRCS) $(DPES)
-	$(CC) -c $(CPPFLAGS) $(LDFLAGS) $< -o $@
+%.o: %.cpp $(DPES)
+	$(CC) -g -c -o $@ $(CPPFLAGS) $<
 
 $(TARGET): $(OBJS)
-	$(CC) $(CPPFLAGS) $^ -o $@
+	$(CC) -o $@ $^ $(CPPFLAGS) $(LDFLAGS)
 
 clean:
 	rm $(OBJS) $(TARGET)

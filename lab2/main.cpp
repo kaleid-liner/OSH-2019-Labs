@@ -10,11 +10,15 @@ const char *prompt = "> ";
 
 int main()
 {
+    char *line;
     while (true) {
-        char *line = readline(prompt);
-        add_history(line);
-        Cmdline cmdline(line);
-        cmdline.exec();
-        free(line);
+        line = readline(prompt);
+
+        if (line && *line) {
+            add_history(line);
+            Cmdline cmdline(line);
+            cmdline.exec();
+            free(line);
+        }
     }
 }
