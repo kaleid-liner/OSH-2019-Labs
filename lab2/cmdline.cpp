@@ -141,7 +141,7 @@ Cmd::Cmd(const string &cmd)
             }
         } else {
             smatch m;
-            if ((it->size() > 0) && (((*it) != "\"") | ((*it) != "\'")) 
+            if ((it->size() > 0) && ((*it)[0] != '\"') && ((*it)[0] != '\'')
                 && (regex_search(*it, m, var_re))) {
                 char *value;
                 if (value = getenv(m[1].str().c_str())) {
