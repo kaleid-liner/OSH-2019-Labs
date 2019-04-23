@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <pwd.h>
+#include <exception>
 
 using namespace std;
 
@@ -22,7 +23,7 @@ namespace {
     vector<string> split_quote(const string &s)
     {
         vector<string> tokens;
-        static const string pattern = "\'[^\']*\'|\"[^\"]*\"|[^\\s]+";
+        static const string pattern = "\'[^\']*\'|\"[^\"]*\"|[^\'\"\\s]+";
         static const regex re(pattern);
         
         for (sregex_iterator it(s.begin(), s.end(), re), end; it != end; ++it) {
@@ -34,7 +35,7 @@ namespace {
 
     vector<string> split_quote_piped(const string &s) 
     {
-        static const string pattern = "(\'[^\']*\')|(\"[^\"]*\")|([^|]+)";
+        static const string pattern = "(\'[^\']*\')|(\"[^\"]*\")|([^|\'\"]+)(\\|)*";
         static const regex re(pattern);
         bool last_is_pipe = true;
         vector<string> tokens;
@@ -45,8 +46,9 @@ namespace {
             } else {
                 tokens.back().append(it->str());
             }
-            if ((*it)[3].matched) {
+            if ((*it)[4].matched) {
                 last_is_pipe = true;
+                tokens.back().pop_back();
             } else {
                 last_is_pipe = false;
             }
@@ -114,6 +116,62 @@ namespace {
         ret = regex_replace(ret, sre, "$1$3");
         return ret;
     }
+
+    string alias(const string &s) 
+    {
+        static const regex cmd_re("^[^\\|]+|\\|(\\s*[^\\|]+)");
+        string aliasstr(s), tmp(s);
+
+        smatch m;
+        string cmd;
+
+        size_t offset = 0;
+
+        while (true) {
+            if (regex_search(tmp, m, cmd_re)) {
+                if (m[1].matched) {
+                    cmd = m[1].str();
+                } else {
+                    cmd = m[0].str();
+                }
+                trim(cmd);
+                auto map_it = sh_stat.alias_table.find(cmd);
+                if (map_it != sh_stat.alias_table.cend()) {
+                    int jump_pipe = m[1].matched;
+                    aliasstr.replace(m.position(0) + offset + jump_pipe, m.length(0) - jump_pipe, map_it->second);
+                    tmp = aliasstr.substr(m.position(0) + offset);
+                    offset = m.position(0) + offset;
+                } else {
+                    tmp = m.suffix();
+                    offset += m.position(0) + m.length(0);
+                }
+            } else {
+                break;
+            }
+        }
+        
+        return aliasstr;
+    }
+
+    pair<string, string> parse_kv(const vector<string> &argv)
+    {
+        if (argv.size() <= 1) {
+            throw logic_error("expect key=value but not found");
+        }
+        pair<string, string> kv;
+        if (argv.size() == 2) {
+            size_t pos = argv[1].find_first_of('=');
+            kv.first = argv[1].substr(0, pos);
+            kv.second = argv[1].substr(pos + 1);
+        } else {
+            if (argv[1].back() != '=') {
+                throw logic_error("expect key=value but not found");
+            }
+            kv.first = argv[1].substr(0, argv[1].size() - 1);
+            kv.second = argv[2];
+        }
+        return kv;
+    }
 }
 
 extern char **environ;
@@ -124,7 +182,9 @@ const char *Cmd::builtins[] = {
     "env",
     "export",
     "unset",
-    "cd"
+    "cd",
+    "alias",
+    "unalias"
 };
 
 Cmd::Cmd(const string &cmd)
@@ -214,45 +274,57 @@ int Cmd::exec(int infd, int outfd) const
         wait(NULL);
         ret = 0;
     } else {
-        if (_argv[0] == "exit") {
-            exit(0);
-        } 
-        if (_argv[0] == "pwd") {
-            string pwd_dirname = ccgetcwd();
-            cout << pwd_dirname << endl;
-            ret = 0;
-        }
-        if (_argv[0] == "cd") {
-            string cd_dirname;
-            if (_argv.size() == 1) {
-                cd_dirname = "";
-            } else {
-                cd_dirname = trim(_argv[1]);
+        try {
+            if (_argv[0] == "exit") {
+                exit(0);
+            } else if (_argv[0] == "pwd") {
+                string pwd_dirname = ccgetcwd();
+                cout << pwd_dirname << endl;
+                ret = 0;
+            } else if (_argv[0] == "cd") {
+                string cd_dirname;
+                if (_argv.size() == 1) {
+                    cd_dirname = "";
+                } else {
+                    cd_dirname = trim(_argv.at(1));
+                }
+                if (cd_dirname == "") { // the "~user" has been parsed
+                    cd_dirname = ccgethome();
+                } else if (cd_dirname == "-") { 
+                    cd_dirname = sh_stat.last_dir;
+                    cout << cd_dirname << endl;
+                }
+                sh_stat.last_dir = ccgetcwd();
+                ret = chdir(cd_dirname.c_str());
+            } else if (_argv[0] == "env") {
+                for (char **p = environ; *p; p++) {
+                    cout << *p << endl;
+                }
+                ret = 0;
+            } else if (_argv[0] == "export") {
+                auto kv = parse_kv(_argv);
+                ret = setenv(kv.first.c_str(), kv.second.c_str(), 1);
+            } else if (_argv[0] == "unset") {
+                ret = unsetenv(_argv.at(1).c_str());
+            } else if (_argv[0] == "alias") {
+                if (_argv.size() == 1) {
+                    for (const auto &kv: sh_stat.alias_table) {
+                        cout << "alias " << kv.first << "='" << kv.second << "'" << endl;
+                    }
+                    ret = 0;
+                } else {
+                    auto kv = parse_kv(_argv);
+                    sh_stat.alias_table[kv.first] = kv.second;
+                    ret = 0;
+                }
+            } else if (_argv[0] == "unalias") {
+                string k = _argv.at(1);
+                sh_stat.alias_table.erase(k);
             }
-            if (cd_dirname == "") { // the "~user" has been parsed
-                cd_dirname = ccgethome();
-            } else if (cd_dirname == "-") { 
-                cd_dirname = sh_stat.last_dir;
-                cout << cd_dirname << endl;
-            }
-            sh_stat.last_dir = ccgetcwd();
-            ret = chdir(cd_dirname.c_str());
-        }
-        if (_argv[0] == "env") {
-            for (char **p = environ; *p; p++) {
-                cout << *p << endl;
-            }
-            ret = 0;
-        }
-        if (_argv[0] == "export") {
-            string kv = _argv[1];
-            size_t pos = _argv[1].find_first_of('=');
-            string k = _argv[1].substr(0, pos);
-            string v = _argv[1].substr(pos + 1);
-            ret = setenv(k.c_str(), v.c_str(), 1);
-        }
-        if (_argv[0] == "unset") {
-            ret = unsetenv(_argv[1].c_str());
+        } catch (const out_of_range &e) {
+            cerr << "command arguments error" << endl;
+        } catch (const logic_error &e) {
+            cerr << e.what() << endl;
         }
     }
 
@@ -265,10 +337,12 @@ int Cmd::exec(int infd, int outfd) const
 
 Cmdline::Cmdline(const string &cmdline): _executed(false)
 {
-    for (const auto &s: split_quote_piped(cmdline)) {
+    string tmp = alias(cmdline);
+
+    for (const auto &s: split_quote_piped(tmp)) {
         _cmds.push_back(Cmd(trim(s)));
     }
-    string tmp = mask_quoted_redirect(cmdline);
+    tmp = mask_quoted_redirect(tmp);
     
     _infd = redirect_in(tmp);
     _outfd = redirect_out(tmp);

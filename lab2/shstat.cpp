@@ -3,4 +3,4 @@
 
 ShStat sh_stat;
 
-ShStat::ShStat(): last_dir(ccgetcwd()) {};
+ShStat::ShStat(): last_dir(ccgetcwd()), alias_table() {};
