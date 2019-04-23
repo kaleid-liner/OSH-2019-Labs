@@ -178,8 +178,6 @@ extern char **environ;
 
 const char *Cmd::builtins[] = {
     "exit",
-    "pwd",
-    "env",
     "export",
     "unset",
     "cd",
@@ -277,10 +275,6 @@ int Cmd::exec(int infd, int outfd) const
         try {
             if (_argv[0] == "exit") {
                 exit(0);
-            } else if (_argv[0] == "pwd") {
-                string pwd_dirname = ccgetcwd();
-                cout << pwd_dirname << endl;
-                ret = 0;
             } else if (_argv[0] == "cd") {
                 string cd_dirname;
                 if (_argv.size() == 1) {
@@ -296,11 +290,6 @@ int Cmd::exec(int infd, int outfd) const
                 }
                 sh_stat.last_dir = ccgetcwd();
                 ret = chdir(cd_dirname.c_str());
-            } else if (_argv[0] == "env") {
-                for (char **p = environ; *p; p++) {
-                    cout << *p << endl;
-                }
-                ret = 0;
             } else if (_argv[0] == "export") {
                 auto kv = parse_kv(_argv);
                 ret = setenv(kv.first.c_str(), kv.second.c_str(), 1);
