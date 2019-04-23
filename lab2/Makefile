@@ -1,8 +1,8 @@
 CC = g++
 LDFLAGS = -lreadline
 CFLAGS = -std=c++11
-DEPS = cmdline.h
-OBJS = cmdline.o main.o
+DEPS = cmdline.h shstat.h
+OBJS = cmdline.o shstat.o main.o
 TARGET = sh
 
 %.o: %.cpp $(DPES)

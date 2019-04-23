@@ -1,7 +1,6 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
-#include <unordered_set>
 
 class Cmd {
 public:
@@ -37,3 +36,7 @@ private:
     int _outfd;
     bool mutable _executed;
 };
+
+// cpp version of some c func
+std::string ccgetcwd();
+std::string ccgethome();

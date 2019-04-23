@@ -1,4 +1,5 @@
 #include "cmdline.h"
+#include "shstat.h"
 #include <unistd.h>
 #include <sstream>
 #include <iostream>
@@ -129,7 +130,7 @@ const char *Cmd::builtins[] = {
 Cmd::Cmd(const string &cmd)
 {
     static const regex var_re("\\$(\\w+)");
-    static const regex user_re("~([\\w-]+)(\\S*)");
+    static const regex user_re("~([\\w-]*)(\\S*)");
 
     vector<string> tokens = split_quote(cmd);
     for (auto it = tokens.begin(); it != tokens.end(); ++it) {
@@ -151,12 +152,17 @@ Cmd::Cmd(const string &cmd)
                     it->replace(m.position(1) - 1, m.length(1) + 1, "");
                 }
             } else if (regex_match(*it, m, user_re)) {
-                auto user_pw = getpwnam(m[1].str().c_str());
-                if (user_pw) {
-                    string user_dirname = user_pw->pw_dir;
-                    // don't user regex_replace in case any fmt in string
-                    it->replace(m.position(0), m.length(0), user_dirname + m[2].str());
+                string user_dirname;
+                if (m.length(1) == 0) {
+                    user_dirname = ccgethome();
+                } else {
+                    auto user_pw = getpwnam(m[1].str().c_str());
+                    if (user_pw) {
+                        user_dirname = user_pw->pw_dir ? user_pw->pw_dir : "";
+                    }
                 }
+                // don't user regex_replace in case any fmt in string
+                it->replace(m.position(0), m.length(1) + 1, user_dirname);
             } 
             if (it->size() > 0 && ((*it)[0] == '\'' || (*it)[0] == '\"')) {
                 it->erase(0, 1);
@@ -211,7 +217,7 @@ int Cmd::exec(int infd, int outfd) const
             exit(0);
         } 
         if (_argv[0] == "pwd") {
-            char *pwd_dirname = get_current_dir_name();
+            string pwd_dirname = ccgetcwd();
             cout << pwd_dirname << endl;
             ret = 0;
         }
@@ -222,16 +228,14 @@ int Cmd::exec(int infd, int outfd) const
             } else {
                 cd_dirname = trim(_argv[1]);
             }
-            const char *real_dirname = cd_dirname.c_str();
             if (cd_dirname == "") { // the "~user" has been parsed
-                char *home = getenv("HOME");
-                if ((home = getenv("HOME")) || (home = getpwuid(getuid())->pw_dir)) {
-                    real_dirname = home;
-                }
+                cd_dirname = ccgethome();
             } else if (cd_dirname == "-") { 
-                
+                cd_dirname = sh_stat.last_dir;
+                cout << cd_dirname << endl;
             }
-            ret = chdir(real_dirname);
+            sh_stat.last_dir = ccgetcwd();
+            ret = chdir(cd_dirname.c_str());
         }
         if (_argv[0] == "env") {
             for (char **p = environ; *p; p++) {
@@ -291,4 +295,26 @@ int Cmdline::exec() const
     _executed = true;
 
     return ret;
+}
+
+string ccgetcwd() 
+{
+    string dirname;
+    char *cur_dir = get_current_dir_name();
+    dirname = cur_dir ? cur_dir : "";
+    free(cur_dir);
+    return dirname;
+}
+
+string ccgethome()
+{
+    string homedir;
+    auto pwd = getpwuid(getuid());
+    char *home ;
+    if (home = getenv("HOME")) {
+        return home;
+    }
+    home = pwd ? pwd->pw_dir : nullptr;
+    homedir = home ? home : "";
+    return homedir;
 }
