@@ -146,6 +146,7 @@ Cmd::Cmd(const string &cmd)
             if ((it->size() > 0) && ((*it)[0] != '\'')
                 && (regex_search(*it, m, var_re))) {
                 char *value;
+                // in fact ok due to c return value lifetime rule
                 if (value = getenv(m[1].str().c_str())) {
                     it->replace(m.position(1) - 1, m.length(1) + 1, value);
                 } else {
@@ -302,7 +303,7 @@ string ccgetcwd()
     string dirname;
     char *cur_dir = get_current_dir_name();
     dirname = cur_dir ? cur_dir : "";
-    free(cur_dir);
+    if (cur_dir) free(cur_dir);
     return dirname;
 }
 
