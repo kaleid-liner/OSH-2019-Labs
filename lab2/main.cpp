@@ -10,14 +10,16 @@ using namespace std;
 const char *prompt = "> ";
 extern ShStat sh_stat;
 
-void initialize_cmdline()
+void initialize_cmdline(int argc, char **argv)
 {
     sh_stat.alias_table["ll"] = "ls -l";
+    sh_stat.argc = argc;
+    sh_stat.argv = argv;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    initialize_cmdline();
+    initialize_cmdline(argc, argv);
 
     char *line;
     while (true) {
@@ -26,7 +28,7 @@ int main()
         if (line && *line) {
             add_history(line);
             Cmdline cmdline(line);
-            cmdline.exec();
+            sh_stat.exit_val = cmdline.exec();
             free(line);
         }
     }

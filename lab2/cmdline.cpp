@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <pwd.h>
 #include <exception>
+#include <numeric>
 
 using namespace std;
 
@@ -109,8 +110,8 @@ namespace {
 
     string mask_quoted_redirect(const string &s)
     {
-        static const regex dre("(\'[^\']*)(<|<<|>|>>)([^\']*\')");
-        static const regex sre("(\"[^\"]*)(<|<<|>|>>)([^\"]*\")");
+        static const regex dre("(\'[^\'<>]*)((?:<|>)+)([^\']*\')");
+        static const regex sre("(\"[^\"<>]*)((?:<|>)+)([^\"]*\")");
 
         string ret = regex_replace(s, dre, "$1$3");
         ret = regex_replace(ret, sre, "$1$3");
@@ -172,6 +173,39 @@ namespace {
         }
         return kv;
     }
+
+    string parse_var(const string &s)
+    {
+        // builtin variables
+        if (s == "?") {
+            return to_string(sh_stat.exit_val);
+        }
+        if (s == "#") {
+            return to_string(sh_stat.argc);
+        }
+        if (s == "@" || s == "*") { // here i don't differentiate between @ and *
+            string ret = accumulate(sh_stat.argv + 1, sh_stat.argv + sh_stat.argc, string(), [](auto a, auto b) {
+                return a + string(b) + " ";
+            });
+            ret.pop_back();
+            return ret;
+        }
+        if (s[0] >= '0' && s[0] <= '9') {
+            int num;
+            try {
+                num = stoi(s);
+            } catch (...) {
+                return "";
+            }
+            if (num >= 0 && num < sh_stat.argc) {
+                return *(sh_stat.argv + num);
+            } else {
+                return "";
+            }
+        } 
+        char *value = getenv(s.c_str());
+        return value ? value : "";
+    }
 }
 
 extern char **environ;
@@ -187,7 +221,7 @@ const char *Cmd::builtins[] = {
 
 Cmd::Cmd(const string &cmd)
 {
-    static const regex var_re("\\$(\\w+)");
+    static const regex var_re("\\$(\\w+|\\d+|[\\?#@\\*])");
     static const regex user_re("~([\\w-]*)(\\S*)");
 
     vector<string> tokens = split_quote(cmd);
@@ -203,13 +237,9 @@ Cmd::Cmd(const string &cmd)
             // "$X" is "{value of X}" and '$HOME' is '$HOME'
             if ((it->size() > 0) && ((*it)[0] != '\'')
                 && (regex_search(*it, m, var_re))) {
-                char *value;
                 // in fact ok due to c return value lifetime rule
-                if (value = getenv(m[1].str().c_str())) {
-                    it->replace(m.position(1) - 1, m.length(1) + 1, value);
-                } else {
-                    it->replace(m.position(1) - 1, m.length(1) + 1, "");
-                }
+                string value = parse_var(m[1].str());
+                it->replace(m.position(1) - 1, m.length(1) + 1, value);
             } else if (regex_match(*it, m, user_re)) {
                 string user_dirname;
                 if (m.length(1) == 0) {
