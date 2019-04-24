@@ -285,22 +285,22 @@ int Cmd::exec(int infd, int outfd) const
     }
 
     if (!_is_builtin) {
-        if (fork() == 0) {
+        pid_t pid;
+        if ((pid = fork()) == 0) {
             vector<char *> argv;
             for (const auto &s: _argv) {
                 argv.push_back(const_cast<char *>(s.c_str()));
             }
             argv.push_back(NULL);
-            if ((ret = execvp(_argv[0].c_str(), argv.data())) < 0) {
+            if (execvp(_argv[0].c_str(), argv.data()) < 0) {
                 // a rather crude hanler
                 // will i use libexplain?
-                cerr << "No such command \"" << _argv[0] << "\" or command runtime error." << endl;
+                cerr << strerror(errno) << endl;
             }
-            exit(ret);
+            exit(errno);
         }
-
-        wait(NULL);
-        ret = 0;
+        waitpid(pid, &ret, 0);
+        ret = WEXITSTATUS(ret);
     } else {
         try {
             if (_argv[0] == "exit") {
