@@ -223,17 +223,23 @@ Cmd::Cmd(const string &cmd)
 {
     static const regex var_re("\\$(\\w+|\\d+|[\\?#@\\*])");
     static const regex user_re("~([\\w-]*)(\\S*)");
+    static const regex rd_re("(\\d*)(<{1,2}|>{1,2})(.*)");
 
     vector<string> tokens = split_quote(cmd);
     for (auto it = tokens.begin(); it != tokens.end(); ++it) {
-        if ((*it)[0] == '<' || (*it)[0] == '>') {
-            if (*it == "<" || *it == ">" || *it == "<<" || *it == ">>") {
+        smatch m;
+        if (regex_match(*it, m, rd_re)) {
+            string rd_str;
+            if (m.length(3) == 0) {
+                rd_str = *it + *(it + 1);
                 ++it;
-            } else { // format like <filename
-                continue;
+            } else {
+                rd_str = *it;
+            }
+            if (!redirect(rd_str)) {
+                cerr << "warning: invalid file descriptor" << endl;
             }
         } else {
-            smatch m;
             // "$X" is "{value of X}" and '$HOME' is '$HOME'
             if ((it->size() > 0) && ((*it)[0] != '\'')
                 && (regex_search(*it, m, var_re))) {
@@ -271,10 +277,14 @@ Cmd::Cmd(const string &cmd)
 
 int Cmd::exec(int infd, int outfd) const 
 {
+    // redirection has higher priority over pipe
+    vector<int> saved_fds;
+
     int saved_stdin = dup(0);
     int saved_stdout = dup(1);
     int ret;
 
+    // this may be overwritten
     if (infd != 0) {
         dup2(infd, 0);
         close(infd);
@@ -282,6 +292,13 @@ int Cmd::exec(int infd, int outfd) const
     if (outfd != 1) {
         dup2(outfd, 1);
         close(outfd);
+    }
+
+    for (auto pfd: _rd_fds) {
+        saved_fds.push_back(dup(pfd.second));
+        if (pfd.first != pfd.second) {
+            dup2(pfd.first, pfd.second);
+        }
     }
 
     if (!_is_builtin) {
@@ -347,6 +364,11 @@ int Cmd::exec(int infd, int outfd) const
         }
     }
 
+    for (size_t i = 0; i < _rd_fds.size(); ++i) {
+        dup2(saved_fds[i], _rd_fds[i].second);
+        close(saved_fds[i]);
+    }
+
     dup2(saved_stdin, 0);
     dup2(saved_stdout, 1);
     close(saved_stdin);
@@ -354,24 +376,67 @@ int Cmd::exec(int infd, int outfd) const
     return ret;
 }
 
-Cmdline::Cmdline(const string &cmdline): _executed(false)
+bool Cmd::redirect(const string &s)
 {
-    string tmp = alias(cmdline);
+    static const regex rd_re("(\\d*)(<{1,2}|>{1,2})(?:&(\\d+)|\\s*(\'[^\']*\'|\"[^\"]*\"|[\\w./-]+))");
 
-    for (const auto &s: split_quote_piped(tmp)) {
+    smatch m;
+    if (!regex_match(s, m, rd_re)) {
+        return false;
+    } 
+
+    /*
+        0: redirect in
+        1: truncate out
+        2: append out
+    */
+    int flag;
+    // dup2(old_fd, new_fd); new_fd > old_fd
+    int new_fd, old_fd;
+
+    if (m[2].str().front() == '<') flag = 0;
+    else flag = m[2].length(); // don't care about this
+
+    if (m[1].length() > 0) {
+        new_fd = stoi(m[1]);
+    } else {
+        new_fd = flag ? 1 : 0;
+    }
+    
+    if (m[3].matched) {
+        old_fd = stoi(m[3]);
+        if (find_if(_rd_fds.cbegin(), _rd_fds.cend(), 
+            [=](const pair<int, int> &a) {
+                return a.second == old_fd;
+            }) == _rd_fds.cend()) {
+            return false;
+        }
+    } else {
+        string filename = m[4].str();
+        switch (flag) {
+            case 0: old_fd = open(filename.c_str(), O_RDONLY); break;
+            case 1: old_fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666); break;// will be umasked
+            case 2: old_fd = open(filename.c_str(), O_APPEND | O_WRONLY, 0666); break;
+        }
+    }
+
+    _rd_fds.push_back({old_fd, new_fd});
+
+    return true;
+}
+
+Cmdline::Cmdline(const string &cmdline)
+{
+    for (const auto &s: split_quote_piped(alias(cmdline))) {
         _cmds.push_back(Cmd(trim(s)));
     }
-    tmp = mask_quoted_redirect(tmp);
-    
-    _infd = redirect_in(tmp);
-    _outfd = redirect_out(tmp);
 }
 
 int Cmdline::exec() const
 {
     size_t n = _cmds.size();
     int fd[2];
-    int infd = _infd;
+    int infd = 0;
     int outfd;
     int ret;
 
@@ -380,13 +445,11 @@ int Cmdline::exec() const
             pipe(fd);
             outfd = fd[1];
         } else {
-            outfd = _outfd;
+            outfd = 1;
         }
         ret = _cmds[i].exec(infd, outfd);
         infd = fd[0];
     }
-
-    _executed = true;
 
     return ret;
 }

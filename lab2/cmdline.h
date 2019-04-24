@@ -6,12 +6,16 @@ class Cmd {
 public:
     Cmd(const std::string &cmd);
     int exec(int infd, int outfd) const;
+
+    // if can redirect, return true, else return false
+    bool redirect(const std::string &s);
     
     static const char *builtins[];
 
 private:
     // argv
     std::vector<std::string> _argv;
+    std::vector<std::pair<int, int>> _rd_fds;
     bool _is_builtin;
 };
 
@@ -19,22 +23,9 @@ class Cmdline {
 public:
     Cmdline(const std::string &cmdline);
     int exec() const;
-    ~Cmdline() {
-        if (_infd != 0) {
-            close(_infd);
-        }
-        if (_outfd != 1) {
-            close(_outfd);
-        }
-    }
 
 private:
     std::vector<Cmd> _cmds;
-    // in file descriptor
-    int _infd;
-    // out file descriptor
-    int _outfd;
-    bool mutable _executed;
 };
 
 // cpp version of some c func
