@@ -8,7 +8,7 @@ public:
     int exec(int infd, int outfd) const;
 
     // if can redirect, return true, else return false
-    bool redirect(const std::string &s);
+    void redirect(const std::string &s);
     
     static const char *builtins[];
 

@@ -76,38 +76,6 @@ namespace {
         all else will be ignored
         return file descriptor
     */
-    int redirect_in(const string &s)
-    {
-        static const regex re("(?:<|<<)\\s*(\'[^\']*\'|\"[^\"]*\"|[\\w./-]+).*");
-
-        smatch m;
-        int fd = 0;
-        if (regex_search(s, m, re)) {
-            string filename = m[1].str();
-            fd = open(filename.c_str(), O_RDONLY);
-        }
-
-        return fd;
-    }
-
-    int redirect_out(const string &s)
-    {
-        static const regex re("(?:(>)|(>>))\\s*(\'[^\']*\'|\"[^\"]*\"|[\\w./-]+).*");
-
-        smatch m;
-        int fd = 1;
-        if (regex_search(s, m, re)) {
-            string filename = m[3].str();
-            if (m[1].matched) {
-                fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666); // will be umasked
-            } else {
-                fd = open(filename.c_str(), O_APPEND | O_WRONLY, 0666);
-            }
-        }
-
-        return fd;
-    }
-
     string mask_quoted_redirect(const string &s)
     {
         static const regex dre("(\'[^\'<>]*)((?:<|>)+)([^\']*\')");
@@ -236,8 +204,10 @@ Cmd::Cmd(const string &cmd)
             } else {
                 rd_str = *it;
             }
-            if (!redirect(rd_str)) {
-                cerr << "warning: invalid file descriptor" << endl;
+            try {
+                redirect(rd_str);
+            } catch (const invalid_argument &e) {
+                cerr << "warning: " << e.what() << endl;
             }
         } else {
             // "$X" is "{value of X}" and '$HOME' is '$HOME'
@@ -295,6 +265,7 @@ int Cmd::exec(int infd, int outfd) const
     }
 
     for (auto pfd: _rd_fds) {
+        // may be overwritten?
         saved_fds.push_back(dup(pfd.second));
         if (pfd.first != pfd.second) {
             dup2(pfd.first, pfd.second);
@@ -376,13 +347,13 @@ int Cmd::exec(int infd, int outfd) const
     return ret;
 }
 
-bool Cmd::redirect(const string &s)
+void Cmd::redirect(const string &s)
 {
     static const regex rd_re("(\\d*)(<{1,2}|>{1,2})(?:&(\\d+)|\\s*(\'[^\']*\'|\"[^\"]*\"|[\\w./-]+))");
 
     smatch m;
     if (!regex_match(s, m, rd_re)) {
-        return false;
+        throw invalid_argument("invalid redirection string: " + s);
     } 
 
     /*
@@ -405,11 +376,12 @@ bool Cmd::redirect(const string &s)
     
     if (m[3].matched) {
         old_fd = stoi(m[3]);
-        if (find_if(_rd_fds.cbegin(), _rd_fds.cend(), 
-            [=](const pair<int, int> &a) {
-                return a.second == old_fd;
-            }) == _rd_fds.cend()) {
-            return false;
+        if (old_fd != 0 && old_fd != 1 && old_fd && 2 &&
+            find_if(_rd_fds.cbegin(), _rd_fds.cend(), 
+                [=](const pair<int, int> &a) {
+                    return a.second == old_fd;
+                }) == _rd_fds.cend()) {
+            throw invalid_argument("invalid file descriptor: " + to_string(old_fd));
         }
     } else {
         string filename = m[4].str();
@@ -418,11 +390,12 @@ bool Cmd::redirect(const string &s)
             case 1: old_fd = open(filename.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666); break;// will be umasked
             case 2: old_fd = open(filename.c_str(), O_APPEND | O_WRONLY, 0666); break;
         }
+        if (old_fd == -1) {
+            throw invalid_argument("no such file named " + filename);
+        }
     }
 
     _rd_fds.push_back({old_fd, new_fd});
-
-    return true;
 }
 
 Cmdline::Cmdline(const string &cmdline)
