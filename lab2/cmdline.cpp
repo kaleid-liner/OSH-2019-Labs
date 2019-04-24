@@ -71,6 +71,11 @@ namespace {
         return tmp;
     }
 
+    size_t find_first_word_end(const string &s, const string &chars = " ")
+    {
+        return s.find_first_of(chars);
+    }
+
     /*
         only the first redirect will be recognized
         all else will be ignored
@@ -104,10 +109,11 @@ namespace {
                     cmd = m[0].str();
                 }
                 trim(cmd);
-                auto map_it = sh_stat.alias_table.find(cmd);
+                auto pos = find_first_word_end(cmd);
+                auto map_it = sh_stat.alias_table.find(cmd.substr(0, pos));
                 if (map_it != sh_stat.alias_table.cend()) {
                     int jump_pipe = m[1].matched;
-                    aliasstr.replace(m.position(0) + offset + jump_pipe, m.length(0) - jump_pipe, map_it->second);
+                    aliasstr.replace(m.position(0) + offset + jump_pipe, pos - jump_pipe, map_it->second);
                     tmp = aliasstr.substr(m.position(0) + offset);
                     offset = m.position(0) + offset;
                 } else {
