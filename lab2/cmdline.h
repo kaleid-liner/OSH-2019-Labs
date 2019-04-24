@@ -7,7 +7,10 @@ public:
     Cmd(const std::string &cmd);
     int exec(int infd, int outfd) const;
 
-    // if can redirect, return true, else return false
+    /*
+        exception: throw invalid_argument if 
+        s is not a valid file redirection string
+    */
     void redirect(const std::string &s);
     
     static const char *builtins[];
