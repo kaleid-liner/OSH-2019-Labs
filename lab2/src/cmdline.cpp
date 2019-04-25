@@ -74,7 +74,7 @@ namespace {
     size_t find_first_word_end(const string &s, const string &chars = " ")
     {
         size_t ret = s.find_first_of(chars);
-        return ret == string::npos ? s.length() : 0;
+        return ret == string::npos ? s.length() : ret;
     }
 
     /*
@@ -407,11 +407,9 @@ void Cmd::redirect(const string &s)
 
 Cmdline::Cmdline(const string &cmdline)
 {
-    string tmp;
-    for (const auto &s: split_quote_piped(alias(cmdline))) {
-        tmp = trim(s);
-        if (tmp.length() > 0) {
-            _cmds.push_back(Cmd(std::move(tmp)));
+    for (const auto &s: split_quote_piped(alias(trim(cmdline)))) {
+        if (s.length() > 0) {
+            _cmds.push_back(Cmd(s));
         }
     }
 }
