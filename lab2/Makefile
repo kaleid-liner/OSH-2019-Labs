@@ -1,15 +1,18 @@
 CC = g++
 LDFLAGS = -lreadline
-CFLAGS = -std=c++11
-DEPS = cmdline.h shstat.h
+CPPFLAGS = -std=c++14
 OBJS = cmdline.o shstat.o main.o
+DEPS = cmdline.h shstat.h
+SRCDIR = ./src
 TARGET = sh
-
-%.o: %.cpp $(DPES)
-	$(CC) -g -c -o $@ $(CPPFLAGS) $<
+SRCDEPS = $(addprefix $(SRCDIR)/,$(DEPS))
 
 $(TARGET): $(OBJS)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(LDFLAGS)
 
+$(OBJS): %.o: $(SRCDIR)/%.cpp $(SRCDEPS)
+	$(CC) -g -c -o $@ $(CPPFLAGS) $<
+
+.PHONY: clean
 clean:
-	rm $(OBJS) $(TARGET)
+	rm -rf $(OBJS) $(TARGET)
