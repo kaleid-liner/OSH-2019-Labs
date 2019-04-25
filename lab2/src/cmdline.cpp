@@ -407,8 +407,12 @@ void Cmd::redirect(const string &s)
 
 Cmdline::Cmdline(const string &cmdline)
 {
+    string tmp;
     for (const auto &s: split_quote_piped(alias(cmdline))) {
-        _cmds.push_back(Cmd(trim(s)));
+        tmp = trim(s);
+        if (tmp.length() > 0) {
+            _cmds.push_back(Cmd(std::move(tmp)));
+        }
     }
 }
 
