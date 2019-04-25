@@ -73,7 +73,8 @@ namespace {
 
     size_t find_first_word_end(const string &s, const string &chars = " ")
     {
-        return s.find_first_of(chars);
+        size_t ret = s.find_first_of(chars);
+        return ret == string::npos ? s.length() : 0;
     }
 
     /*
