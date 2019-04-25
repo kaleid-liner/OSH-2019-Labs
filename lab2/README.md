@@ -4,7 +4,7 @@ A shell program imitating bash's behaviour, written with C++.
 
 ## Install dependencies
 
-klsh use [the GNU Readline Library](https://tiswww.case.edu/php/chet/readline/rltop.html) to provide some basic command line features, e.g., command editing, history expansion, file names completion. To get insight into its user interface, you can read the [doc](https://tiswww.case.edu/php/chet/readline/rluserman.html).  klsh need GNU Readline Library to compile and run. If you are on an Ubuntu machine, please type:
+klsh use [the GNU Readline Library](https://tiswww.case.edu/php/chet/readline/rltop.html) to provide some basic command line features, e.g., command editing, history expansion, file names completion. To get insight into its user interface, you can read the [doc](https://tiswww.case.edu/php/chet/readline/rluserman.html).  klsh needs GNU Readline Library to compile and run. If you are on an Ubuntu machine, please type:
 
 ```shell
 sudo apt install libreadline7 libreadline-dev
@@ -55,7 +55,7 @@ The other features' tests below will show more robustness.
 
 ### Pipe
 
-klsh support piped command and n-piped command. Some tests:
+klsh supports piped command and n-piped command. Some tests:
 
 ![pipe](assets/pipe.png)
 
@@ -81,7 +81,7 @@ In the `\d+>&\d+` redirection, there should be no space between `>` and `& `(in 
 
 ![warning_fd](assets/warning_fd.png)
 
-This is also consistent with bash. But I only throw a warning but bash just abort the command. Which is better? I don't know.
+This is also consistent with bash. But I only throw a warning while bash just aborts the command. Which is better? I don't know.
 
 ### Environment variables
 
@@ -133,7 +133,7 @@ It supports `-`, `~`, `<space>`, `~username`.
 
 ### Alias
 
-I have use `ll` above. That's an alias I added when the program is initialized. You can add your own aliasings. klsh also supports recursive aliasing.
+I have used `ll` above. That's an aliasing I added when the program was initialized. You can add your own aliasings. klsh also supports recursive aliasing.
 
 ![alias](assets/alias.png)
 
@@ -143,7 +143,7 @@ And unalias:
 
 ### Completion & history
 
-This is supported by GNU Readline.
+These are supported by GNU Readline.
 
 ### More features
 
