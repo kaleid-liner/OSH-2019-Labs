@@ -14,6 +14,8 @@
 
 #define PORT 8000
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
 int parse_request(const char *req_str, request_t *req_info) {
     if (sscanf(req_str, "%s %s %s", req_info->method, req_info->uri, req_info->version) != 3) {
         fprintf(stderr, "malformed http request\n");
@@ -39,6 +41,8 @@ void handle_request(const request_t *req) {
     } 
 
     FILE *file = fopen(abs_path, "rb");
+    free(abs_path);
+    free(cur_dir);
     if (file == NULL) {
         if (errno == ENOENT) {
             send_response(req->connfd, NF, content_404, strlen(content_404));
@@ -48,8 +52,6 @@ void handle_request(const request_t *req) {
     }
 
     send_file_response(req->connfd, file);
-    free(abs_path);
-    free(cur_dir);
 }
 
 void send_response(int connfd, status_t status, 
@@ -81,9 +83,10 @@ void send_file_response(int connfd, FILE *file) {
     fseek(file, 0L, SEEK_END);
     __off_t file_size = ftell(file);
     fseek(file, 0L, SEEK_SET);
+    if (file_size < 0) file_size = LONG_MAX;
     
     char header[64];
-    char *buf = (char *)malloc(BUF_SIZE);
+    char *buf = (char *)malloc(min(BUF_SIZE, file_size));
     sprintf(header, "HTTP/1.0 200 OK\r\nContent-Length: %ld\r\n\r\n", file_size);
     rio_writen(connfd, header, strlen(header));
 
@@ -107,6 +110,8 @@ void server(int connfd) {
         }
     }
 
+    free(buf);
+
     header[readn] = 0;
     request_t req_info;
     if (parse_request(header, &req_info) < 0) {
@@ -114,12 +119,12 @@ void server(int connfd) {
         return;
     }
 
+    free(header);
+
     req_info.connfd = connfd;
     handle_request(&req_info);
 
     close(connfd);
-    free(header);
-    free(buf);
 }
 
 void *thread(void *args) {
