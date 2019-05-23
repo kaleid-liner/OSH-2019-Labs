@@ -23,7 +23,8 @@ int parse_request(const char *req_str, request_t *req_info) {
 
 void handle_request(const request_t *req) {
     if (strncmp(req->method, "GET", 3) != 0) {
-        fprintf(stderr, "only support `GET` method");
+        fprintf(stderr, "only support `GET` method\n");
+        return;
     }
 
     char *abs_path = (char *)malloc(PATH_MAX);
@@ -68,11 +69,11 @@ void send_response(int connfd, status_t status,
     size_t buf_len = strlen(buf);
 
     if (rio_writen(connfd, buf, buf_len) < buf_len) {
-        fprintf(stderr, "error while sending response");
+        fprintf(stderr, "error while sending response\n");
         return;
     }
     if (rio_writen(connfd, content, content_length) < content_length) {
-        fprintf(stderr, "error while sending response");
+        fprintf(stderr, "error while sending response\n");
     }
 }
 
@@ -136,14 +137,14 @@ void *thread(void *args) {
             if (events[n].data.fd == listenfd) {
                 int connfd = accept(listenfd, (struct sockaddr *)&clnt_addr, &clnt_addr_len);
                 if (connfd < 0) {
-                    fprintf(stderr, "error while accepting listenfd");
+                    fprintf(stderr, "error while accepting listenfd\n");
                     continue;
                 }
                 setnonblocking(connfd);
                 ev.events = EPOLLIN | EPOLLET;
                 ev.data.fd = connfd;
                 if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev) < 0) {
-                    fprintf(stderr, "error while adding connfd to epoll inst");
+                    fprintf(stderr, "error while adding connfd to epoll inst\n");
                     continue;
                 }
             } else {
@@ -169,7 +170,7 @@ int main() {
     
     int epollfd = epoll_create1(0);
     if (epollfd < 0) {
-        fprintf(stderr, "error while creating epoll fd");
+        fprintf(stderr, "error while creating epoll fd\n");
         exit(1);
     }
 
@@ -182,13 +183,13 @@ int main() {
     epevent.data.fd = listenfd;
 
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &epevent) < 0) {
-        fprintf(stderr, "error while adding listen fd to epoll inst");
+        fprintf(stderr, "error while adding listen fd to epoll inst\n");
         exit(1);
     }
 
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
-            fprintf(stderr, "error while creating %d thread", i);
+            fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }

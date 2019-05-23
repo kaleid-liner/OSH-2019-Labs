@@ -9,16 +9,16 @@ int open_listenfd(uint16_t port) {
 
     int listenfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listenfd < 0) {
-        fprintf(stderr, "Error while opening listenfd");
+        fprintf(stderr, "Error while opening listenfd\n");
         return -1;
     }
     
     if (bind(listenfd, (struct sockaddr*)&sevr_addr, sizeof(sevr_addr)) != 0) {
-        fprintf(stderr, "Error while binding listenfd to address");
+        fprintf(stderr, "Error while binding listenfd to address\n");
         return -1;
     }
     if (listen(listenfd, MAX_CONN) < 0) {
-        fprintf(stderr, "Error while listening on listenfd");
+        fprintf(stderr, "Error while listening on listenfd\n");
         return -1;
     }
 
