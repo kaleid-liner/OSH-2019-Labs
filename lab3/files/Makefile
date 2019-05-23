@@ -1,5 +1,5 @@
 CC = g++
-LDFLAGS = 
+LDFLAGS = -lpthread
 CFLAGS = 
 OBJS = netutils.o main.o
 DEPS = netutils.h

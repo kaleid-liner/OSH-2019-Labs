@@ -6,6 +6,8 @@
 #define MAX_HEADER 8192
 // 10M
 #define BUF_SIZE 10485760
+#define THREAD_NUM 16
+#define MAX_EVENTS 64
 
 typedef enum STATUS {
     OK,   // OK
@@ -30,3 +32,12 @@ void send_response(int connfd, status_t status, const char *content, size_t cont
 void handle_request(const request_t *req);
 int parse_request(const char *req_str, request_t *req_info);
 void server(int connfd);
+
+struct thread_args {
+    int listenfd;
+    int epollfd;
+};
+
+void *thread(void *args);
+
+void setnonblocking(int fd);

@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <sys/epoll.h>
+#include <fcntl.h>
 #include "netutils.h"
 #include "main.h"
 
@@ -118,16 +121,79 @@ void server(int connfd) {
     free(buf);
 }
 
+void *thread(void *args) {
+    struct epoll_event *events = (struct epoll_event *)malloc(sizeof(struct epoll_event) * 64);
+    struct epoll_event ev;
+    int epollfd = ((struct thread_args*)args)->epollfd;
+    int listenfd = ((struct thread_args*)args)->listenfd;
+
+    struct sockaddr_in clnt_addr;
+    socklen_t clnt_addr_len = sizeof(clnt_addr);
+
+    int nfds;
+    while ((nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1)) > 0) {
+        for (int n = 0; n < nfds; ++n) {
+            if (events[n].data.fd == listenfd) {
+                int connfd = accept(listenfd, (struct sockaddr *)&clnt_addr, &clnt_addr_len);
+                if (connfd < 0) {
+                    fprintf(stderr, "error while accepting listenfd");
+                    continue;
+                }
+                setnonblocking(connfd);
+                ev.events = EPOLLIN | EPOLLET;
+                ev.data.fd = connfd;
+                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev) < 0) {
+                    fprintf(stderr, "error while adding connfd to epoll inst");
+                    continue;
+                }
+            } else {
+                server(events[n].data.fd);
+            }
+        }
+    }
+
+    free(events);
+}
+
+void setnonblocking(int fd) {
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+      
+    fcntl(fd, F_SETFL, new_option);
+}
+
 int main() {
     int listenfd = open_listenfd(PORT);
-    
-    struct sockaddr_in clnt_addr;
-    socklen_t addr_len = sizeof(clnt_addr);
 
-    while (1) {
-        int connfd = accept(listenfd, (struct sockaddr *)&clnt_addr, &addr_len);
-        server(connfd);
+    pthread_t threads[THREAD_NUM];
+    
+    int epollfd = epoll_create1(0);
+    if (epollfd < 0) {
+        fprintf(stderr, "error while creating epoll fd");
+        exit(1);
     }
+
+    struct thread_args targs;
+    targs.epollfd = epollfd;
+    targs.listenfd = listenfd;
+
+    struct epoll_event epevent;
+    epevent.events = EPOLLIN | EPOLLET;
+    epevent.data.fd = listenfd;
+
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &epevent) < 0) {
+        fprintf(stderr, "error while adding listen fd to epoll inst");
+        exit(1);
+    }
+
+    for (int i = 0; i < THREAD_NUM; ++i) {
+        if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
+            fprintf(stderr, "error while creating %d thread", i);
+            exit(1);
+        }
+    }
+
+    thread(&targs);
 
     close(listenfd);
 }
