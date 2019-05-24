@@ -102,6 +102,8 @@ void server(int connfd) {
     char *header = (char *)malloc(MAX_HEADER);
     char *buf = (char *)malloc(MAX_HEADER);
 
+    fprintf(stderr, "start reading from %d\n", connfd);
+
     size_t readn = readlinefd(connfd, header);
     size_t buf_read_n;
     while ((buf_read_n = readlinefd(connfd, buf))) {
@@ -154,6 +156,7 @@ void *thread(void *args) {
                 }
             } else {
                 server(events[n].data.fd);
+                epoll_ctl(epollfd, EPOLL_CTL_DEL, events[n].data.fd, &ev);
             }
         }
     }
@@ -201,5 +204,6 @@ int main() {
 
     thread(&targs);
 
+    close(epollfd);
     close(listenfd);
 }

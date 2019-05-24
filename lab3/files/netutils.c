@@ -1,4 +1,5 @@
 #include "netutils.h"
+#include <errno.h>
 
 int open_listenfd(uint16_t port) {
     struct sockaddr_in sevr_addr;
@@ -28,7 +29,7 @@ int open_listenfd(uint16_t port) {
 size_t rio_writen(int fd, const char *usrbuf, size_t n) 
 {
     size_t nleft = n;
-    int nwritten;
+    ssize_t nwritten;
     const char *bufp = usrbuf;
 
     while (nleft > 0) {
@@ -44,7 +45,16 @@ size_t rio_writen(int fd, const char *usrbuf, size_t n)
 
 size_t readlinefd(int fd, char *linebuf) {
     size_t readn = 0;
-    while (read(fd, linebuf + readn, 1) > 0) {
+    int read_ret;
+    while (read_ret = read(fd, linebuf + readn, 1)) {
+        if (read_ret < 0) {
+            if (errno == EAGAIN) {
+                continue;
+            } 
+            else break;
+        } else if (read_ret == 0) {
+            break;
+        }
         ++readn;
         if (readn >= 2
             && linebuf[readn - 2] == '\r'
