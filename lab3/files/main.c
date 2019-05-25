@@ -105,8 +105,6 @@ int server(http_status_t *status) {
     char *header = status->header;
     size_t readn = status->readn;
 
-    fprintf(stderr, "start reading from %d\n", connfd);
-
     int is_end = 0;
 
     while (1) {
@@ -165,7 +163,7 @@ int server(http_status_t *status) {
 }
 
 void *thread(void *args) {
-    struct epoll_event *events = (struct epoll_event *)malloc(sizeof(struct epoll_event) * 64);
+    struct epoll_event *events = (struct epoll_event *)malloc(sizeof(struct epoll_event) * MAX_EVENTS);
     struct epoll_event ev;
     int epollfd = ((struct thread_args*)args)->epollfd;
     int listenfd = ((struct thread_args*)args)->listenfd;
@@ -261,14 +259,12 @@ int main() {
         exit(1);
     }
 
-/*
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
             fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }
-*/
 
     thread(&targs);
 
