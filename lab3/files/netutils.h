@@ -9,4 +9,3 @@
 
 int open_listenfd(uint16_t port);
 size_t rio_writen(int fd, const char *usrbuf, size_t n);
-size_t readlinefd(int fd, char *line_buf);

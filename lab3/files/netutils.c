@@ -42,27 +42,3 @@ size_t rio_writen(int fd, const char *usrbuf, size_t n)
 
     return n;
 }
-
-size_t readlinefd(int fd, char *linebuf) {
-    size_t readn = 0;
-    int read_ret;
-    while (read_ret = read(fd, linebuf + readn, 1)) {
-        if (read_ret < 0) {
-            if (errno == EAGAIN | errno == EWOULDBLOCK) {
-                break;
-            } 
-            else {
-                perror("read");
-            }
-        } else if (read_ret == 0) {
-            break;
-        }
-        ++readn;
-        if (readn >= 2
-            && linebuf[readn - 2] == '\r'
-            && linebuf[readn - 1] == '\n')
-            break;
-    }
-
-    return (readn > 2) ? (readn - 2) : 0;
-}

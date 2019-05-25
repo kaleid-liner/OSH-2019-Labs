@@ -31,7 +31,15 @@ void send_file_response(int connfd, FILE *file);
 void send_response(int connfd, status_t status, const char *content, size_t content_length);
 void handle_request(const request_t *req);
 int parse_request(const char *req_str, request_t *req_info);
-void server(int connfd);
+
+typedef struct HttpStatus {
+    int connfd;
+    char *header;
+    size_t readn;
+} http_status_t;
+
+// 0 if not end, 1 if end response
+int server(http_status_t *status);
 
 struct thread_args {
     int listenfd;

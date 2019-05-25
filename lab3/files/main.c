@@ -18,7 +18,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 int parse_request(const char *req_str, request_t *req_info) {
-    if (sscanf(req_str, "%s %s %s", req_info->method, req_info->uri, req_info->version) != 3) {
+    if (sscanf(req_str, "%s %s %[^\r\n]", req_info->method, req_info->uri, req_info->version) != 3) {
         fprintf(stderr, "malformed http request\n");
         return -1;
     }
@@ -100,35 +100,68 @@ void send_file_response(int connfd, FILE *file) {
     free(buf);
 }
 
-void server(int connfd) {
-    char *header = (char *)malloc(MAX_HEADER);
-    char *buf = (char *)malloc(MAX_HEADER);
+int server(http_status_t *status) {
+    int connfd = status->connfd;
+    char *header = status->header;
+    size_t readn = status->readn;
 
     fprintf(stderr, "start reading from %d\n", connfd);
 
-    size_t readn = readlinefd(connfd, header);
-    size_t buf_read_n;
-    while ((buf_read_n = readlinefd(connfd, buf))) {
-        if (buf_read_n <= 2) {
+    int is_end = 0;
+
+    while (1) {
+        ssize_t ret = read(connfd, header + readn, 1);
+        if (readn >= MAX_HEADER) {
+            // entity too large
+            free(header);
+            free(status);
+            send_response(connfd, ISE, content_500, sizeof(content_500));
+            close(connfd);
             break;
+        }
+        if (ret < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // read end normally
+                break;
+            } else {
+                perror("read");
+                break;
+            }
+        } else if (ret == 0) {
+            // EOF encountered
+            break;
+        } else {
+            readn++;
+            if ( readn >= 4
+              && header[readn - 1] == '\n'
+              && header[readn - 2] == '\r'
+              && header[readn - 3] == '\n'
+              && header[readn - 4] == '\r' ) {
+                is_end = 1;
+                break;
+            }
         }
     }
 
-    free(buf);
+    if (!is_end) {
+        status->readn = readn;
+        return 0;
+    }
 
-    header[readn] = 0;
     request_t req_info;
     if (parse_request(header, &req_info) < 0) {
         send_response(connfd, ISE, content_500, strlen(content_500));
-        return;
+        return 1;
     }
 
     free(header);
+    free(status);
 
     req_info.connfd = connfd;
     handle_request(&req_info);
 
     close(connfd);
+    return 1;
 }
 
 void *thread(void *args) {
@@ -164,14 +197,28 @@ void *thread(void *args) {
                     setnonblocking(connfd);
 
                     ev.events = EPOLLIN | EPOLLET;
-                    ev.data.fd = connfd;
+
+                    http_status_t *status = (http_status_t *)malloc(sizeof(http_status_t));
+                    char *header = (char *)malloc(MAX_HEADER);
+                    if (header == NULL || status == NULL) {
+                        perror("malloc");
+                        exit(1);
+                    }
+                    status->header = header;
+                    status->connfd = connfd;
+                    status->readn = 0;
+                    ev.data.ptr = status;
+
                     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev) < 0) {
                         perror("epoll_ctl");
                         continue;
                     }
                 }
             } else {
-                server(events[n].data.fd);
+                http_status_t *status = (http_status_t *)events[n].data.ptr;
+                if (server(status) == 0) {
+                    epoll_ctl(epollfd, EPOLL_CTL_MOD, status->connfd, &events[n]);
+                }
             }
         }
     }
@@ -214,12 +261,14 @@ int main() {
         exit(1);
     }
 
+/*
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
             fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }
+*/
 
     thread(&targs);
 
