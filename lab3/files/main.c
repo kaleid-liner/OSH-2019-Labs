@@ -115,7 +115,7 @@ int server(http_status_t *status) {
             // entity too large
             free(header);
             free(status);
-            send_response(connfd, ISE, content_500, strlen(content_500));
+            send_response(connfd, ISE, content_500, sizeof(content_500));
             close(connfd);
             break;
         }
@@ -124,23 +124,11 @@ int server(http_status_t *status) {
                 // read end normally
                 break;
             } else {
-                // exception
                 perror("read");
-                free(header);
-                free(status);
-                close(connfd);
                 break;
             }
         } else if (ret == 0) {
             // EOF encountered
-            // e.g., the client shutdown the writing end
-            // malformed http request
-            // it may fail when the client shutdown both the writing and reading end.
-            // e.g., the client call `close`.
-            free(header);
-            free(status);
-            send_response(connfd, ISE, content_500, strlen(content_500));
-            close(connfd);
             break;
         } else {
             readn++;
