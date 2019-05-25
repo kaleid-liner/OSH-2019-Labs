@@ -56,3 +56,9 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
 - The server operates smoothly when network is bad. I simulate this situation by `write`ing half of the content, sleeping for 10 seconds, and `write`ing the remaining half.
 - The performance, concurrency and availability seems well on my dual core virtual machine.
 - Basic access control by comparing the absolute path of the request file and workspace of the server.
+
+## Load Test
+
+Test on my dual core ubuntu virtual machine: 
+
+![server_load_test](assets/server_load_test.png)
