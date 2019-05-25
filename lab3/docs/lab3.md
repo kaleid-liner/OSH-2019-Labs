@@ -12,7 +12,9 @@ make
 
 ## Run
 
-`./server`
+```
+./server
+```
 
 ## Code Design
 
