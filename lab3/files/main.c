@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
+#include <signal.h>
 #include "netutils.h"
 #include "main.h"
 
@@ -185,6 +186,8 @@ void setnonblocking(int fd) {
 }
 
 int main() {
+    signal(SIGPIPE, SIG_IGN);
+
     int listenfd = open_listenfd(PORT);
 
     setnonblocking(listenfd);
