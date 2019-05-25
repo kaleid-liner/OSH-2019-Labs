@@ -53,6 +53,7 @@ void handle_request(const request_t *req) {
     }
 
     send_file_response(req->connfd, file);
+    fclose(file);
 }
 
 void send_response(int connfd, status_t status, 
