@@ -48,10 +48,12 @@ size_t readlinefd(int fd, char *linebuf) {
     int read_ret;
     while (read_ret = read(fd, linebuf + readn, 1)) {
         if (read_ret < 0) {
-            if (errno == EAGAIN) {
-                continue;
+            if (errno == EAGAIN | errno == EWOULDBLOCK) {
+                break;
             } 
-            else break;
+            else {
+                perror("read");
+            }
         } else if (read_ret == 0) {
             break;
         }

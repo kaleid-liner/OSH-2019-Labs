@@ -139,24 +139,37 @@ void *thread(void *args) {
     socklen_t clnt_addr_len = sizeof(clnt_addr);
 
     int nfds;
-    while ((nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1)) > 0) {
+    while (1) {
+        nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+
+        if (nfds <= 0) {
+            perror("epoll_wait");
+            continue;
+        }
         for (int n = 0; n < nfds; ++n) {
             if (events[n].data.fd == listenfd) {
-                int connfd = accept(listenfd, (struct sockaddr *)&clnt_addr, &clnt_addr_len);
-                if (connfd < 0) {
-                    fprintf(stderr, "error while accepting listenfd\n");
-                    continue;
-                }
-                setnonblocking(connfd);
-                ev.events = EPOLLIN | EPOLLET;
-                ev.data.fd = connfd;
-                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev) < 0) {
-                    fprintf(stderr, "error while adding connfd to epoll inst\n");
-                    continue;
+                while (1) {
+                    int connfd = accept(listenfd, (struct sockaddr *)&clnt_addr, &clnt_addr_len);
+                    if (connfd < 0) {
+                        if (errno == EAGAIN | errno == EWOULDBLOCK) {
+                            break;
+                        } else {
+                            perror("accept");
+                            break;
+                        }
+                    }
+
+                    setnonblocking(connfd);
+
+                    ev.events = EPOLLIN | EPOLLET;
+                    ev.data.fd = connfd;
+                    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &ev) < 0) {
+                        perror("epoll_ctl");
+                        continue;
+                    }
                 }
             } else {
                 server(events[n].data.fd);
-                epoll_ctl(epollfd, EPOLL_CTL_DEL, events[n].data.fd, &ev);
             }
         }
     }
@@ -173,6 +186,8 @@ void setnonblocking(int fd) {
 
 int main() {
     int listenfd = open_listenfd(PORT);
+
+    setnonblocking(listenfd);
 
     pthread_t threads[THREAD_NUM];
     
@@ -195,12 +210,14 @@ int main() {
         exit(1);
     }
 
+    /*
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
             fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }
+    */
 
     thread(&targs);
 
