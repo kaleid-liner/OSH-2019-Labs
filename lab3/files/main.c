@@ -39,6 +39,7 @@ void handle_request(const request_t *req) {
 
     if (strncmp(cur_dir, abs_path, strlen(cur_dir)) != 0) {
         send_response(req->connfd, ISE, content_500, strlen(content_500));
+        return;
     } 
 
     FILE *file = fopen(abs_path, "rb");
@@ -50,6 +51,7 @@ void handle_request(const request_t *req) {
         } else {
             send_response(req->connfd, ISE, content_500, strlen(content_500));
         }
+        return;
     }
 
     send_file_response(req->connfd, file);
@@ -214,9 +216,7 @@ void *thread(void *args) {
                 }
             } else {
                 http_status_t *status = (http_status_t *)events[n].data.ptr;
-                if (server(status) == 0) {
-                    epoll_ctl(epollfd, EPOLL_CTL_MOD, status->connfd, &events[n]);
-                }
+                server(status);
             }
         }
     }
