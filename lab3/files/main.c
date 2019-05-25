@@ -214,14 +214,12 @@ int main() {
         exit(1);
     }
 
-    /*
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
             fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }
-    */
 
     thread(&targs);
 

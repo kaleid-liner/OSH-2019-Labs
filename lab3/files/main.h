@@ -6,7 +6,7 @@
 #define MAX_HEADER 8192
 // 10M
 #define BUF_SIZE 10485760
-#define THREAD_NUM 8
+#define THREAD_NUM 4
 #define MAX_EVENTS 64
 
 typedef enum STATUS {
