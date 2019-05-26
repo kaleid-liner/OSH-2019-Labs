@@ -1,6 +1,6 @@
 # Epoll Web Server
 
-A simple though high performance web server written with epoll and pure c.
+A simple yet high performance web server written with epoll and pure c.
 
 ## Compile
 
