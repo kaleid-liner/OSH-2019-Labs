@@ -37,9 +37,9 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
    
       ```c
       typedef struct HttpStatus {
-          int connfd;
-          char *header;
-          size_t readn;
+          int connfd;     // connection file descriptor
+          char *header;   // http header read, malloced with `MAX_HEADER` size
+          size_t readn;   // number of bytes read
       } http_status_t;
       ```
       
@@ -48,7 +48,17 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
 ### Notice
 
 - While calling `read` on a nonblocking descriptor, only when you get a `-1` return value and `errno == EAGAIN || errno == EWOULDBLOCK` (no data left) or a `0` return value (EOF detected), it means that the reading is done.
-- You can only use Edge Triggered mode in multi-thread environments.
+
+  You may get a `0` return value when:
+
+  - Client close the connection. At this case the client will send a EOF implicitly.
+  - Client shutdown the writing end of the connection.
+  - Client explicitly send a EOF to signal the server it has finished writing.
+
+- You can only use Edge Triggered mode in multi-thread environments (**when you share an epoll instance among threads**) to prevent spurious wake-ups.
+
+  *Why I share an epoll instance among threads:* Because this is more performant. And `epoll_wait` is generally thread-safe. ET also overperfoms LT.
+
 - `epoll_data_t.data` is a union. Its `ptr` field is designed to store session state. You should malloc status when needed and assign it to the `ptr`, and free it after you have done responding to it.
 
 ## Features
