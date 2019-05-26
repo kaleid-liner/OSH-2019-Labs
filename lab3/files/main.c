@@ -31,8 +31,14 @@ void handle_request(const request_t *req) {
     }
 
     char *abs_path = (char *)malloc(PATH_MAX);
+    if (abs_path == NULL) {
+        perror("malloc");
+    }
     const char *rel_path = req->uri[0] == '/' ? req->uri + 1 : req->uri;
     char *cur_dir = (char *)malloc(PATH_MAX);
+    if (cur_dir == NULL) {
+        perror("malloc");
+    }
 
     realpath(rel_path, abs_path);
     getcwd(cur_dir, PATH_MAX);
@@ -91,6 +97,9 @@ void send_file_response(int connfd, FILE *file) {
     
     char header[64];
     char *buf = (char *)malloc(min(BUF_SIZE, file_size));
+    if (buf == NULL) {
+        perror("malloc");
+    }
     sprintf(header, "HTTP/1.0 200 OK\r\nContent-Length: %ld\r\n\r\n", file_size);
     rio_writen(connfd, header, strlen(header));
 
@@ -166,6 +175,9 @@ int server(http_status_t *status) {
 
 void *thread(void *args) {
     struct epoll_event *events = (struct epoll_event *)malloc(sizeof(struct epoll_event) * MAX_EVENTS);
+    if (events == NULL) {
+        perror("malloc");
+    }
     struct epoll_event ev;
     int epollfd = ((struct thread_args*)args)->epollfd;
     int listenfd = ((struct thread_args*)args)->listenfd;
