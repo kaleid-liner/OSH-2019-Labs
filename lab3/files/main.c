@@ -10,6 +10,7 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/sendfile.h>
 #include "netutils.h"
 #include "main.h"
 
@@ -93,22 +94,26 @@ void send_file_response(int connfd, FILE *file) {
     fseek(file, 0L, SEEK_END);
     __off_t file_size = ftell(file);
     fseek(file, 0L, SEEK_SET);
-    if (file_size < 0) file_size = LONG_MAX;
     
     char header[64];
-    char *buf = (char *)malloc(min(BUF_SIZE, file_size));
-    if (buf == NULL) {
-        perror("malloc");
-    }
     sprintf(header, "HTTP/1.0 200 OK\r\nContent-Length: %ld\r\n\r\n", file_size);
     rio_writen(connfd, header, strlen(header));
 
     size_t readn;
-    while ((readn = fread(buf, 1, BUF_SIZE, file)) > 0) {
-        rio_writen(connfd, buf, readn);
-    }
 
-    free(buf);
+    int filefd = fileno(file);
+    ssize_t left = file_size;
+    ssize_t writen;
+    while (left > 0) {
+        writen = sendfile(connfd, filefd, NULL, left);
+        if (writen < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
+            perror("sendfile");
+            break;
+        }
+        left -= writen;
+    }
 }
 
 int server(http_status_t *status) {
