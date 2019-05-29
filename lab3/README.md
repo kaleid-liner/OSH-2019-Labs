@@ -47,12 +47,12 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
           size_t readn;   // number of bytes read
           FILE *file;     // file to send
           size_t left;    // number of bytes left to send
-    req_status_t req_status; 
+          req_status_t req_status; 
       } http_status_t;
       ```
-      
+
       While `req_status_t` is defined as:
-      
+
       ```c
       typedef enum REQUEST_STATUS {
           Reading,
@@ -60,9 +60,9 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
           Ended
       } req_status_t;
       ```
-      
+
       Next time when `epoll_wait` get events on this fd, the server will continue on the request.
-      
+
    3. After complete reading, connfd will enter status `Writing`. If `sendfile` cause `EAGAIN`, and `left > 0` , it means that writing end is temporily unavailable. I have to save the status, `EPOLL_CTL_MOD` to change its trigger events to `EPOLLOUT | EPOLLET`. And continue the writing next time. 
 
 ### Notice
@@ -82,6 +82,8 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
 - `epoll_data_t.data` is a union. Its `ptr` field is designed to store session state. You should malloc status when needed and assign it to the `ptr`, and free it after you have done responding to it.
 
 - Notice that writing to connfd (by calling `sendfile`) is also non-blocking.
+
+- **USE EPOLLONESHOT** in multithreaded environment.
 
 ## Features
 

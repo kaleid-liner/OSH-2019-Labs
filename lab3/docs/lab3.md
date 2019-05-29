@@ -83,6 +83,8 @@ Concurrency of this web server was implemented by using thread pool (Posix threa
 
 - Notice that writing to connfd (by calling `sendfile`) is also non-blocking.
 
+- **USE EPOLLONESHOT** in multithreaded environment.
+
 ## Features
 
 - The server operates smoothly when network is bad. I simulate this situation by `write`ing half of the content, sleeping for 10 seconds, and `write`ing the remaining half.
