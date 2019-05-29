@@ -256,7 +256,7 @@ void *thread(void *args) {
 
                     setnonblocking(connfd);
 
-                    ev.events = EPOLLIN | EPOLLET;
+                    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 
                     http_status_t *status = (http_status_t *)malloc(sizeof(http_status_t));
                     char *header = (char *)malloc(MAX_HEADER);
@@ -278,8 +278,15 @@ void *thread(void *args) {
             } else {
                 http_status_t *status = (http_status_t *)events[n].data.ptr;
                 server(status);
-                if (status->req_status == Writing) {
-                    ev.events = EPOLLOUT | EPOLLET;
+                if (status->req_status == Reading) {
+                    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                    ev.data.ptr = status;
+                    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, status->connfd, &ev) < 0) {
+                        perror("epoll_ctl");
+                        continue;
+                    }
+                } else if (status->req_status == Writing) {
+                    ev.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
                     ev.data.ptr = status;
                     if (epoll_ctl(epollfd, EPOLL_CTL_MOD, status->connfd, &ev) < 0) {
                         perror("epoll_ctl");
@@ -288,8 +295,12 @@ void *thread(void *args) {
                 } else if (status->req_status == Ended) {
                     if (status->file != NULL) {
                         fclose(status->file);
+                        status->file = NULL;
                     }
-                    free(status->header);
+                    if (status->header != NULL) {
+                        free(status->header);
+                        status->header = NULL;
+                    }
                     close(status->connfd);
                     free(status);
                 }
@@ -335,14 +346,12 @@ int main() {
         exit(1);
     }
 
-/*
     for (int i = 0; i < THREAD_NUM; ++i) {
         if (pthread_create(&threads[i], NULL, thread, &targs) < 0) {
             fprintf(stderr, "error while creating %d thread\n", i);
             exit(1);
         }
     }
-    */
 
     thread(&targs);
 
